@@ -5,12 +5,30 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	urfave "github.com/urfave/cli/v2"
 
 	"github.com/zbum/nexus3-cli/internal/config"
 	"github.com/zbum/nexus3-cli/internal/registry"
 )
+
+// componentUploadTime returns the most recent blob-creation time across the
+// component's assets, falling back to LastModified when BlobCreated is zero.
+// For a Docker tag this is close to "when the tag was (re)pushed".
+func componentUploadTime(c registry.Component) time.Time {
+	var latest time.Time
+	for _, a := range c.Assets {
+		t := a.BlobCreated
+		if t.IsZero() {
+			t = a.LastModified
+		}
+		if t.After(latest) {
+			latest = t
+		}
+	}
+	return latest
+}
 
 func imageCommand() *urfave.Command {
 	return &urfave.Command{
@@ -143,7 +161,7 @@ func imageDeleteCommand() *urfave.Command {
 		Flags: []urfave.Flag{
 			&urfave.StringFlag{Name: "name", Aliases: []string{"n"}, Usage: "image name", Required: true},
 			&urfave.StringFlag{Name: "tag", Aliases: []string{"t"}, Usage: "tag to delete"},
-			&urfave.IntFlag{Name: "keep", Aliases: []string{"k"}, Usage: "keep only the N most recent tags (by natural sort)"},
+			&urfave.IntFlag{Name: "keep", Aliases: []string{"k"}, Usage: "keep only the N most recently uploaded tags (by blob creation time)"},
 			&urfave.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip confirmation prompt"},
 		},
 		Action: func(c *urfave.Context) error {
@@ -182,7 +200,11 @@ func imageDeleteCommand() *urfave.Command {
 					return fmt.Errorf("tag %s:%s not found", name, tag)
 				}
 			} else {
-				sort.Slice(comps, func(i, j int) bool {
+				sort.SliceStable(comps, func(i, j int) bool {
+					ti, tj := componentUploadTime(comps[i]), componentUploadTime(comps[j])
+					if !ti.Equal(tj) {
+						return ti.Before(tj) // oldest first
+					}
 					return naturalLess(comps[i].Version, comps[j].Version)
 				})
 				if len(comps) <= keep {
@@ -193,10 +215,17 @@ func imageDeleteCommand() *urfave.Command {
 			}
 
 			if !c.Bool("yes") {
-				fmt.Fprintf(c.App.Writer, "About to delete %d tag(s) from %s:\n", len(targets), name)
+				fmt.Fprintf(c.App.Writer, "About to delete %d tag(s) from %s (oldest uploads first):\n", len(targets), name)
+				tw := tabwriter.NewWriter(c.App.Writer, 0, 0, 2, ' ', 0)
 				for _, t := range targets {
-					fmt.Fprintf(c.App.Writer, "  - %s\n", t.Version)
+					ts := componentUploadTime(t)
+					when := "—"
+					if !ts.IsZero() {
+						when = ts.Format("2006-01-02 15:04:05")
+					}
+					fmt.Fprintf(tw, "  - %s\t(uploaded %s)\n", t.Version, when)
 				}
+				tw.Flush()
 				fmt.Fprint(c.App.Writer, "Proceed? [y/N]: ")
 				var ans string
 				fmt.Scanln(&ans)

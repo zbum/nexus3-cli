@@ -19,6 +19,15 @@ Inspired by [mlabouardy/nexus-cli](https://github.com/mlabouardy/nexus-cli), but
 
 ## Installation
 
+### Homebrew (macOS, Linux)
+
+```bash
+brew tap zbum/tap https://github.com/zbum/homebrew-tap
+brew install nexus3-cli
+```
+
+Upgrade later with `brew update && brew upgrade nexus3-cli`.
+
 ### From source
 
 ```bash
@@ -30,12 +39,9 @@ make build            # output: dist/nexus3-cli
 ### Cross-compile release binaries
 
 ```bash
-make build-all
-# dist/nexus3-cli-linux-amd64
-# dist/nexus3-cli-linux-arm64
-# dist/nexus3-cli-darwin-amd64
-# dist/nexus3-cli-darwin-arm64
-# dist/nexus3-cli-windows-amd64.exe
+make build-all        # raw binaries
+make release          # also produces .tar.gz archives ready to upload
+make checksums        # print SHA-256 of the tarballs (used by the Homebrew formula)
 ```
 
 ### Install to `$GOBIN`
