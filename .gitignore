@@ -1,0 +1,19 @@
+# Build artifacts
+/dist/
+*.exe
+*.test
+*.out
+
+# Go workspace
+vendor/
+
+# Local config / secrets
+.nexus-cli
+
+# IDE / editor (non-project)
+.vscode/
+.DS_Store
+
+.claude
+.idea
+*.iml
