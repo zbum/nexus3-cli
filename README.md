@@ -22,7 +22,7 @@ Inspired by [mlabouardy/nexus-cli](https://github.com/mlabouardy/nexus-cli), but
 ### Homebrew (macOS, Linux)
 
 ```bash
-brew tap zbum/tap https://github.com/zbum/homebrew-tap
+brew tap zbum/tap
 brew install nexus3-cli
 ```
 
