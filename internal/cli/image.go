@@ -154,6 +154,25 @@ func imageInfoCommand() *urfave.Command {
 	}
 }
 
+// parseDuration parses a human-friendly duration string.
+// Supports Go's time.ParseDuration syntax (e.g. "720h") plus a "d" suffix
+// for days (e.g. "30d" = 720h).
+func parseDuration(s string) (time.Duration, error) {
+	if strings.HasSuffix(s, "d") {
+		s = strings.TrimSuffix(s, "d")
+		var days int
+		if _, err := fmt.Sscanf(s, "%d", &days); err != nil || days <= 0 {
+			return 0, fmt.Errorf("invalid duration %q: days must be a positive integer", s+"d")
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration %q: use e.g. 30d, 720h", s)
+	}
+	return d, nil
+}
+
 func imageDeleteCommand() *urfave.Command {
 	return &urfave.Command{
 		Name:  "delete",
@@ -162,17 +181,31 @@ func imageDeleteCommand() *urfave.Command {
 			&urfave.StringFlag{Name: "name", Aliases: []string{"n"}, Usage: "image name", Required: true},
 			&urfave.StringFlag{Name: "tag", Aliases: []string{"t"}, Usage: "tag to delete"},
 			&urfave.IntFlag{Name: "keep", Aliases: []string{"k"}, Usage: "keep only the N most recently uploaded tags (by blob creation time)"},
+			&urfave.StringFlag{Name: "keep-within", Usage: "never delete tags uploaded within this duration (e.g. 30d, 720h)"},
 			&urfave.BoolFlag{Name: "yes", Aliases: []string{"y"}, Usage: "skip confirmation prompt"},
 		},
 		Action: func(c *urfave.Context) error {
 			name := c.String("name")
 			tag := c.String("tag")
 			keep := c.Int("keep")
+			keepWithin := c.String("keep-within")
 			if tag == "" && keep <= 0 {
 				return fmt.Errorf("either --tag or --keep must be provided")
 			}
 			if tag != "" && keep > 0 {
 				return fmt.Errorf("--tag and --keep are mutually exclusive")
+			}
+			if tag != "" && keepWithin != "" {
+				return fmt.Errorf("--tag and --keep-within are mutually exclusive")
+			}
+
+			var keepWithinDur time.Duration
+			if keepWithin != "" {
+				d, err := parseDuration(keepWithin)
+				if err != nil {
+					return err
+				}
+				keepWithinDur = d
 			}
 
 			client, err := newClient()
@@ -211,7 +244,23 @@ func imageDeleteCommand() *urfave.Command {
 					fmt.Fprintf(c.App.Writer, "Nothing to delete: %d tag(s) found, keeping %d\n", len(comps), keep)
 					return nil
 				}
-				targets = comps[:len(comps)-keep]
+				candidates := comps[:len(comps)-keep]
+
+				if keepWithinDur > 0 {
+					cutoff := time.Now().Add(-keepWithinDur)
+					for _, comp := range candidates {
+						if componentUploadTime(comp).Before(cutoff) {
+							targets = append(targets, comp)
+						}
+					}
+				} else {
+					targets = candidates
+				}
+
+				if len(targets) == 0 {
+					fmt.Fprintf(c.App.Writer, "Nothing to delete: all candidates are within the --keep-within window\n")
+					return nil
+				}
 			}
 
 			if !c.Bool("yes") {
