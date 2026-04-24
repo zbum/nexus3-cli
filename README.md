@@ -111,9 +111,19 @@ Looks the tag up via `GET /service/rest/v1/search?repository=…&format=docker&n
 nexus3-cli image delete --name my-app --keep 5
 ```
 
-Tags are ordered with a **natural sort** (so `v2` precedes `v10`), and everything older than the last `N` is removed.
+Tags are ordered by **blob upload time** (oldest first, with natural sort as tie-breaker), and everything older than the last `N` is removed.
 
 Add `--yes` / `-y` to skip the confirmation prompt in CI pipelines.
+
+### Protect recently uploaded tags
+
+```bash
+nexus3-cli image delete --name my-app --keep 5 --keep-within 30d
+```
+
+When `--keep-within` is specified alongside `--keep`, tags uploaded within the given duration are never deleted — even if they exceed the `--keep` count. This means the final number of retained tags may be greater than `N`.
+
+Supported duration formats: `30d` (days), `720h` (hours), `48h30m`, or any Go `time.ParseDuration` syntax.
 
 ### Show image size
 
@@ -145,7 +155,7 @@ nexus3-cli image ls
 nexus3-cli image tags    --name <image>
 nexus3-cli image info    --name <image> --tag <tag>
 nexus3-cli image delete  --name <image> --tag <tag>
-nexus3-cli image delete  --name <image> --keep <N> [--yes]
+nexus3-cli image delete  --name <image> --keep <N> [--keep-within <duration>] [--yes]
 nexus3-cli image size    --name <image>
 nexus3-cli --version
 ```
